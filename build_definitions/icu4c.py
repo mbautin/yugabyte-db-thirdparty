@@ -19,19 +19,23 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from build_definitions import *
 
-class CurlDependency(Dependency):
+class Icu4cDependency(Dependency):
+    VERSION_MAJOR = 67
+    VERSION_MINOR = 1
+    VERSION_WITH_UNDERSCORE = '%d_%d' % (VERSION_MAJOR, VERSION_MINOR)
+    VERSION_WITH_DASH = '%d-%d' % (VERSION_MAJOR, VERSION_MINOR)
+
     def __init__(self):
-        super(CurlDependency, self).__init__(
-                'curl', '7.32.0', "https://curl.haxx.se/download/curl-{0}.tar.gz",
-                BUILD_GROUP_COMMON)
+        super(Icu4cDependency, self).__init__(
+            'icu4c',
+            Icu4cDependency.VERSION_WITH_UNDERSCORE,
+            'http://github.com/unicode-org/icu/releases/download/release-%s/icu4c-%s-src.tgz' % (
+                Icu4cDependency.VERSION_WITH_DASH,
+                Icu4cDependency.VERSION_WITH_UNDERSCORE),
+            BUILD_GROUP_COMMON)
         self.copy_sources = True
 
     def build(self, builder):
-        disabled_features = ['ftp', 'file', 'ldap', 'ldaps', 'rtsp', 'dict', 'telnet', 'tftp',
-                             'pop3', 'imap', 'smtp', 'gopher', 'manual', 'librtmp', 'ipv6']
-        extra_args = ['--disable-' + feature for feature in disabled_features]
-
-        if is_mac():
-            extra_args.append('--with-ssl=%s' % builder.tp_installed_dir)
-
-        builder.build_with_configure(builder.log_prefix(self), extra_args)
+        builder.build_with_configure(
+                builder.log_prefix(self),
+                source_subdir='source')

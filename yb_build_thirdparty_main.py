@@ -24,8 +24,10 @@ import random
 import re
 import subprocess
 import sys
-import time
 from datetime import datetime
+import time
+import random
+import shutil
 
 from build_definitions import *
 import build_definitions
@@ -86,8 +88,8 @@ class Builder:
         self.tp_download_dir = os.path.join(self.tp_dir, 'download')
         self.tp_installed_dir = os.path.join(self.tp_dir, 'installed')
         self.tp_installed_common_dir = os.path.join(self.tp_installed_dir, BUILD_TYPE_COMMON)
-        self.tp_installed_llvm7_common_dir = os.path.join(
-                self.tp_installed_dir + '_llvm7', BUILD_TYPE_COMMON)
+        self.tp_installed_llvm10_common_dir = os.path.join(
+                self.tp_installed_dir + '_llvm10', BUILD_TYPE_COMMON)
         self.src_dir = os.path.dirname(self.tp_dir)
         if not os.path.isdir(self.src_dir):
             fatal('YB src directory "{}" does not exist'.format(self.src_dir))
@@ -96,7 +98,13 @@ class Builder:
 
         self.dependencies = [
             build_definitions.zlib.ZLibDependency(),
-            build_definitions.lz4.LZ4Dependency(),
+            build_definitions.lz4.LZ4Dependency()
+        ]
+
+        if is_mac():
+            self.dependencies.append(build_definitions.openssl.OpenSSLDependency())
+
+        self.dependencies += [
             build_definitions.bitshuffle.BitShuffleDependency(),
             build_definitions.libev.LibEvDependency(),
             build_definitions.rapidjson.RapidJsonDependency(),
@@ -108,6 +116,9 @@ class Builder:
             build_definitions.flex.FlexDependency(),
             build_definitions.bison.BisonDependency(),
         ]
+
+        if is_mac():
+            self.dependencies.append(build_definitions.icu4c.Icu4cDependency())
 
         if is_linux():
             self.dependencies += [
@@ -235,7 +246,7 @@ class Builder:
         self.curl_path = which('curl')
         os.environ['PATH'] = ':'.join([
                 os.path.join(self.tp_installed_common_dir, 'bin'),
-                os.path.join(self.tp_installed_llvm7_common_dir, 'bin'),
+                os.path.join(self.tp_installed_llvm10_common_dir, 'bin'),
                 os.environ['PATH']
         ])
         self.build(BUILD_TYPE_COMMON)
@@ -473,7 +484,7 @@ class Builder:
                 return
             log("File %s already exists but has wrong checksum, removing", path)
             remove_path(path)
-        
+
         log("Fetching %s", filename)
         sleep_time_sec = INITIAL_DOWNLOAD_RETRY_SLEEP_TIME_SEC
         for attempt_index in range(1, MAX_FETCH_ATTEMPTS + 1):
@@ -489,7 +500,7 @@ class Builder:
                 log("Will retry after %.1f seconds", sleep_time_sec)
                 time.sleep(sleep_time_sec)
                 sleep_time_sec += DOWNLOAD_RETRY_SLEEP_INCREASE_SEC
-                
+
         if not os.path.exists(path):
             fatal("Downloaded '%s' but but unable to find '%s'", url, path)
         expected_checksum = self.get_expected_checksum(filename, downloaded_path=path)
@@ -576,6 +587,7 @@ class Builder:
             log("Removing temporary directory: %s", tmp_out_dir)
             shutil.rmtree(tmp_out_dir)
 
+
     def prepare_out_dirs(self):
         dirs = [os.path.join(self.tp_installed_dir, type) for type in BUILD_TYPES]
         libcxx_dirs = [os.path.join(dir, 'libcxx') for dir in dirs]
@@ -661,12 +673,13 @@ class Builder:
             autoconf=False,
             source_subdir=None):
         os.environ["YB_REMOTE_COMPILATION"] = "0"
+
         dir_for_build = os.getcwd()
         if source_subdir:
             dir_for_build = os.path.join(dir_for_build, source_subdir)
 
         with PushDir(dir_for_build):
-            log("Building in %s", dir_for_build)
+            log("Building in %s", source_subdir)
             if autoconf:
                 log_output(log_prefix, ['autoreconf', '-i'])
 
@@ -681,7 +694,8 @@ class Builder:
             if install:
                 log_output(log_prefix, ['make'] + install)
 
-    def build_with_cmake(self, dep, extra_args=None, use_ninja=False, **kwargs):
+    def build_with_cmake(
+            self, dep, extra_args=None, use_ninja=False, src_dir=None, install=['install']):
         if use_ninja == 'auto':
             use_ninja = is_ninja_available()
             log('Ninja is %s', 'available' if use_ninja else 'unavailable')
@@ -694,10 +708,17 @@ class Builder:
         remove_path('CMakeCache.txt')
         remove_path('CMakeFiles')
 
-        src_dir = self.source_path(dep)
-        if 'src_dir' in kwargs:
-            src_dir = os.path.join(src_dir, kwargs['src_dir'])
-        args = ['cmake', src_dir]
+        source_path = self.source_path(dep)
+        if src_dir:
+            src_dir = os.path.join(source_path, src_dir)
+        else:
+            src_dir = source_path
+        args = [
+                'cmake',
+                src_dir,
+                '-DCMAKE_C_COMPILER=%s' % self.get_c_compiler(),
+                '-DCMAKE_CXX_COMPILER=%s' % self.get_cxx_compiler()
+        ]
         if use_ninja:
             args += ['-G', 'Ninja']
         if extra_args is not None:
@@ -710,8 +731,8 @@ class Builder:
 
         log_output(log_prefix, build_tool_cmd)
 
-        if 'install' not in kwargs or kwargs['install']:
-            log_output(log_prefix, [build_tool, 'install'])
+        if install:
+            log_output(log_prefix, [build_tool] + install)
 
     def build(self, build_type):
         if build_type != BUILD_TYPE_COMMON and self.args.build_type is not None:
@@ -866,7 +887,8 @@ class Builder:
 
         with PushDir(self.tp_dir):
             git_commit_sha1 = subprocess.check_output(
-                    ['git', 'log', '--pretty=%H', '-n', '1'] + input_files_for_stamp).strip()
+                    ['git', 'log', '--pretty=%H', '-n', '1'] + input_files_for_stamp
+            ).strip().decode('utf-8')
             build_stamp = 'git_commit_sha1={}\n'.format(git_commit_sha1)
             for git_extra_args in ([], ['--cached']):
                 git_diff = subprocess.check_output(
