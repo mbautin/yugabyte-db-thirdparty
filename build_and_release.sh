@@ -116,7 +116,7 @@ cd "$repo_dir"
   if [[ -n ${YB_LINUXBREW_DIR:-} ]]; then
     export PATH=$YB_LINUXBREW_DIR/bin:$PATH
   fi
-  time ./build_thirdparty.sh
+  time ./build_thirdparty.sh "$@"
 )
 
 # -------------------------------------------------------------------------------------------------
