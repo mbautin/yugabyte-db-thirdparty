@@ -98,6 +98,18 @@ fi
 
 echo "Building YugabyteDB third-party code in $repo_dir"
 
+echo "Current directory"
+pwd
+echo
+
+echo "Free disk space in current directory:"
+df -H .
+echo
+
+echo "Free disk space on all volumes:"
+df -H
+echo
+
 cd "$repo_dir"
 
 (
