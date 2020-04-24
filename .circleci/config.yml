@@ -22,9 +22,9 @@ jobs:
           checkout_dir=$PWD
           docker run -t \
             --cap-add=SYS_PTRACE \
-            "--mount=type=bind,src=$checkout_dir,dst=/opt/yb-build/thirdparty" \
+            "--mount=type=bind,src=$checkout_dir,dst=/opt/yb-build/thirdparty/checkout" \
             yugabyteci/yb_build_infra_centos7:v2020-03-28T07_29_17 \
             bash -c "
-              cd /opt/yb-build/thirdparty
+              cd /opt/yb-build/thirdparty/checkout
               sudo -u yugabyteci ./build_and_release.sh
             "
