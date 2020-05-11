@@ -55,7 +55,8 @@ class LLVMDependency(Dependency):
                                   '-DPYTHON_EXECUTABLE={}'.format(python_executable),
                                   '-DCLANG_BUILD_EXAMPLES=ON'
                                  ],
-                                 use_ninja='auto')
+                                 use_ninja='auto',
+                                 src_dir='llvm')
 
         link_path = os.path.join(builder.tp_dir, 'clang-toolchain')
         remove_path(link_path)

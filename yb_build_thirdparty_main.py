@@ -23,7 +23,9 @@ import platform
 import re
 import subprocess
 import sys
-
+from datetime import datetime
+import random
+import shutil
 
 from build_definitions import *
 import build_definitions
@@ -88,8 +90,8 @@ class Builder:
         self.tp_download_dir = os.path.join(self.tp_dir, 'download')
         self.tp_installed_dir = os.path.join(self.tp_dir, 'installed')
         self.tp_installed_common_dir = os.path.join(self.tp_installed_dir, BUILD_TYPE_COMMON)
-        self.tp_installed_llvm7_common_dir = os.path.join(
-                self.tp_installed_dir + '_llvm7', BUILD_TYPE_COMMON)
+        self.tp_installed_llvm10_common_dir = os.path.join(
+                self.tp_installed_dir + '_llvm10', BUILD_TYPE_COMMON)
         self.src_dir = os.path.dirname(self.tp_dir)
         if not os.path.isdir(self.src_dir):
             fatal('YB src directory "{}" does not exist'.format(self.src_dir))
@@ -241,7 +243,7 @@ class Builder:
         self.curl_path = which('curl')
         os.environ['PATH'] = ':'.join([
                 os.path.join(self.tp_installed_common_dir, 'bin'),
-                os.path.join(self.tp_installed_llvm7_common_dir, 'bin'),
+                os.path.join(self.tp_installed_llvm10_common_dir, 'bin'),
                 os.environ['PATH']
         ])
         self.build(BUILD_TYPE_COMMON)
@@ -351,7 +353,7 @@ class Builder:
                     if os.path.exists(path):
                         log("Removing {} build output: {}".format(dependency.name, path))
                         remove_path(path)
-            if dependency.dir is not None:
+            if dependency.dir_name is not None:
                 src_dir = self.source_path(dependency)
                 if os.path.exists(src_dir):
                     log("Removing {} source: {}".format(dependency.name, src_dir))
@@ -382,7 +384,9 @@ class Builder:
             if archive_path is None:
                 return
             self.ensure_file_downloaded(download_url, archive_path)
-            self.extract_archive(archive_path)
+            self.extract_archive(archive_path,
+                                 os.path.dirname(src_path),
+                                 os.path.basename(src_path))
         else:
             log("Creating {}".format(src_path))
             mkdir_if_missing(src_path)
@@ -392,7 +396,7 @@ class Builder:
                 archive_path = os.path.join(self.tp_download_dir, extra.archive_name)
                 log("Downloading {} from {}".format(extra.archive_name, extra.download_url))
                 self.ensure_file_downloaded(extra.download_url, archive_path)
-                output_path = os.path.join(src_path, extra.dir)
+                output_path = os.path.join(src_path, extra.dir_name)
                 self.extract_archive(archive_path, output_path)
                 if hasattr(extra, 'post_exec'):
                     with PushDir(output_path):
@@ -429,7 +433,7 @@ class Builder:
 
 
     def source_path(self, dep):
-        return os.path.join(self.tp_src_dir, dep.dir)
+        return os.path.join(self.tp_src_dir, dep.dir_name)
 
     def get_checksum_file(self):
         return os.path.join(self.tp_dir, CHECKSUM_FILE_NAME)
@@ -486,6 +490,7 @@ class Builder:
                 return
             log("File {} already exists but has wrong checksum, removing".format(path))
             remove_path(path)
+
         log("Fetching {}".format(filename))
         subprocess.check_call([self.curl_path, '-o', path, '--location', url])
         if not os.path.exists(path):
@@ -501,18 +506,75 @@ class Builder:
         real_checksum = hashsum_file(hashlib.sha256(), filename)
         return real_checksum == expected_checksum
 
-    def extract_archive(self, filename, out_dir=None):
-        if out_dir is None:
-            out_dir = self.tp_src_dir
-        mkdir_if_missing(out_dir)
+    def extract_archive(self, archive_filename, out_dir, out_name=None):
+        """
+        Extract the given archive into a subdirectory of out_dir, optionally renaming it to
+        the specified name out_name.
+        """
+
+        def dest_dir_already_exists(full_out_path):
+            if os.path.exists(full_out_path):
+                log("Directory already exists: %s, skipping extracting %s" % (
+                        full_out_path, archive_filename))
+                return True
+            return False
+
+        full_out_path = None
+        if out_name:
+            full_out_path = os.path.join(out_dir, out_name)
+            if dest_dir_already_exists(full_out_path):
+                return
+
+        # Extract the archive into a temporary directory.
+        tmp_out_dir = os.path.join(
+            out_dir, 'tmp-extract-%s-%s-%d' % (
+                os.path.basename(archive_filename),
+                datetime.now().strftime('%Y-%m-%dT%H_%M_%S'),  # Current second-level timestamp.
+                random.randint(10 ** 8, 10 ** 9 - 1)))  # A random 9-digit integer.
+        if os.path.exists(tmp_out_dir):
+            raise IOError("Just-generated unique directory name already exists: %s" % tmp_out_dir)
+        os.makedirs(tmp_out_dir)
+
+        archive_extension = None
         for ext in ARCHIVE_TYPES:
-            if filename.endswith(ext):
-                with PushDir(out_dir):
-                    cmd = ARCHIVE_TYPES[ext].format(filename)
-                    log("Extracting: {} (directory: {})".format(cmd, out_dir))
-                    subprocess.check_call(cmd, shell=True)
-                    return
-        fatal("Unknown archive type for: {}".format(filename))
+            if archive_filename.endswith(ext):
+                archive_extension = ext
+                break
+        if not archive_extension:
+            fatal("Unknown archive type for: {}".format(archive_filename))
+
+        try:
+            with PushDir(tmp_out_dir):
+                cmd = ARCHIVE_TYPES[archive_extension].format(archive_filename)
+                log("Extracting %s in temporary directory %s", cmd, tmp_out_dir)
+                subprocess.check_call(cmd, shell=True)
+                extracted_subdirs = [
+                    subdir_name for subdir_name in os.listdir(tmp_out_dir)
+                    if not subdir_name.startswith('.')
+                ]
+                if len(extracted_subdirs) != 1:
+                    raise IOError(
+                        "Expected the extracted archive %s to contain exactly one "
+                        "subdirectory and no files, found: %s" % (
+                            archive_filename, extracted_subdirs))
+                extracted_subdir_basename = extracted_subdirs[0]
+                extracted_subdir_path = os.path.join(tmp_out_dir, extracted_subdir_basename)
+                if not os.path.isdir(extracted_subdir_path):
+                    raise IOError(
+                        "This is a file, expected it to be a directory: %s" %
+                        extracted_subdir_path)
+
+                if not full_out_path:
+                    full_out_path = os.path.join(out_dir, extracted_subdir_basename)
+                    if dest_dir_already_exists(full_out_path):
+                        return
+
+                log("Moving %s to %s", extracted_subdir_path, full_out_path)
+                shutil.move(extracted_subdir_path, full_out_path)
+        finally:
+            log("Removing temporary directory: %s", tmp_out_dir)
+            shutil.rmtree(tmp_out_dir)
+            
 
     def prepare_out_dirs(self):
         dirs = [os.path.join(self.tp_installed_dir, type) for type in BUILD_TYPES]
@@ -601,7 +663,8 @@ class Builder:
         if 'install' not in kwargs or kwargs['install']:
             log_output(log_prefix, ['make', 'install'])
 
-    def build_with_cmake(self, dep, extra_args=None, use_ninja=False, **kwargs):
+    def build_with_cmake(
+            self, dep, extra_args=None, use_ninja=False, src_dir=None, install=True):
         if use_ninja == 'auto':
             use_ninja = is_ninja_available()
             log('Ninja is {}'.format('available' if use_ninja else 'unavailable'))
@@ -614,9 +677,11 @@ class Builder:
         remove_path('CMakeCache.txt')
         remove_path('CMakeFiles')
 
-        src_dir = self.source_path(dep)
-        if 'src_dir' in kwargs:
-            src_dir = os.path.join(src_dir, kwargs['src_dir'])
+        source_path= self.source_path(dep)
+        if src_dir:
+            src_dir = os.path.join(source_path, src_dir)
+        else:
+            src_dir = source_path
         args = ['cmake', src_dir]
         if use_ninja:
             args += ['-G', 'Ninja']
@@ -630,7 +695,7 @@ class Builder:
 
         log_output(log_prefix, build_tool_cmd)
 
-        if 'install' not in kwargs or kwargs['install']:
+        if install:
             log_output(log_prefix, [build_tool, 'install'])
 
     def build(self, build_type):
@@ -748,7 +813,7 @@ class Builder:
 
         new_build_stamp = self.get_build_stamp_for_dependency(dep)
 
-        if dep.dir is not None:
+        if dep.dir_name is not None:
             src_dir = self.source_path(dep)
             if not os.path.exists(src_dir):
                 log("Have to rebuild {} ({}): source dir {} does not exist".format(
@@ -810,7 +875,7 @@ class Builder:
         if not os.path.isdir(src_dir):
             fatal("Directory '{}' does not exist".format(src_dir))
 
-        build_dir = os.path.join(self.tp_build_dir, self.build_type, dep.dir)
+        build_dir = os.path.join(self.tp_build_dir, self.build_type, dep.dir_name)
         mkdir_if_missing(build_dir)
 
         if dep.copy_sources:
