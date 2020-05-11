@@ -21,39 +21,20 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from build_definitions import *
 
 class LLVMDependency(Dependency):
-    VERSION = '7.0.1'
+    VERSION = '10.0.0'
 
+    # https://github.com/llvm/llvm-project/archive/llvmorg-10.0.0.tar.gz
     def __init__(self):
-        url_prefix="http://releases.llvm.org/{0}/"
         super(LLVMDependency, self).__init__(
-                'llvm', LLVMDependency.VERSION, url_prefix + 'llvm-{0}.src.tar.xz',
+                'llvm', LLVMDependency.VERSION, 
+                "https://github.com/llvm/llvm-project/archive/llvmorg-{0}.tar.gz",
                 BUILD_GROUP_COMMON)
-        self.dir += ".src"
-        self.extra_downloads = [
-            ExtraDownload('cfe', self.version, url_prefix + 'cfe-{0}.src.tar.xz',
-                                        'tools', ['mv', 'cfe-{}.src'.format(self.version), 'cfe']),
-            ExtraDownload('compiler-rt', self.version, url_prefix + 'compiler-rt-{0}.src.tar.xz',
-                          'projects',
-                          ['mv', 'compiler-rt-{}.src'.format(self.version), 'compiler-rt']),
-            ExtraDownload(
-                'clang-tools-extra', self.version, url_prefix + 'clang-tools-extra-{0}.src.tar.xz',
-                'tools/cfe/tools',
-                ['mv', 'clang-tools-extra-{}.src'.format(self.version), 'extra']),
-        ]
-
         self.copy_sources = False
 
     def build(self, builder):
-        prefix = builder.get_prefix('llvm7')
+        prefix = builder.get_prefix('llvm10')
 
-        # The LLVM build can fail if a different version is already installed
-        # in the install prefix. It will try to link against that version instead
-        # of the one being built.
-        subprocess.check_call(
-                "rm -Rf {0}/include/{{llvm*,clang*}} {0}/lib/lib{{LLVM,LTO,clang}}* {0}/lib/clang/ "
-                        "{0}/lib/cmake/{{llvm,clang}}".format(prefix), shell=True)
-
-        python_executable = which('python')
+        python_executable = which('python3')
         if not os.path.exists(python_executable):
             fatal("Could not find Python -- needed to build LLVM.")
 
