@@ -94,6 +94,19 @@ class Builder:
         self.cc_wrapper = None
         self.cxx_wrapper = None
 
+        self.dependencies = None
+        self.selected_dependencies = []
+
+        self.using_linuxbrew = False
+        self.linuxbrew_dir = None
+        self.cc = None
+        self.cxx = None
+        self.args = None
+
+        self.detect_linuxbrew()
+        self.load_expected_checksums()
+
+    def populate_dependencies(self):
         self.dependencies = [
             build_definitions.zlib.ZLibDependency(),
             build_definitions.lz4.LZ4Dependency()
@@ -121,14 +134,15 @@ class Builder:
         if is_linux():
             self.dependencies += [
                 build_definitions.libuuid.LibUuidDependency(),
-
-                build_definitions.llvm.LLVMDependency(),
-                build_definitions.libcxx.LibCXXDependency(),
-
                 build_definitions.libunwind.LibUnwindDependency(),
-                build_definitions.libbacktrace.LibBacktraceDependency(),
-                build_definitions.include_what_you_use.IncludeWhatYouUseDependency()
+                build_definitions.libbacktrace.LibBacktraceDependency()
             ]
+            if not self.args.gcc_only:
+                self.dependencies += [
+                    build_definitions.llvm.LLVMDependency(),
+                    build_definitions.libcxx.LibCXXDependency(),
+                    build_definitions.include_what_you_use.IncludeWhatYouUseDependency(),
+                ]
 
         self.dependencies += [
             build_definitions.protobuf.ProtobufDependency(),
@@ -146,17 +160,6 @@ class Builder:
             build_definitions.libuv.LibUvDependency(),
             build_definitions.cassandra_cpp_driver.CassandraCppDriverDependency(),
         ]
-
-        self.selected_dependencies = []
-
-        self.using_linuxbrew = False
-        self.linuxbrew_dir = None
-        self.cc = None
-        self.cxx = None
-        self.args = None
-
-        self.detect_linuxbrew()
-        self.load_expected_checksums()
 
     def set_compiler(self, compiler_type):
         if is_mac():
@@ -189,6 +192,9 @@ class Builder:
         parser.add_argument('--skip-sanitizers',
                             action='store_true',
                             help='Do not build ASAN and TSAN instrumented dependencies.')
+        parser.add_argument('--gcc-only',
+                            action='store_true',
+                            help='Skip anything that requires Clang, including ASAN/TSAN')
         parser.add_argument('--clean',
                             action='store_const',
                             const=True,
@@ -212,6 +218,12 @@ class Builder:
             raise ValueError(
                 "--skip is not compatible with specifying a list of dependencies to build")
 
+        if is_mac() and self.args.gcc_only:
+            raise ValueError("--gcc-only is not valid on macOS")
+        if self.args.gcc_only:
+            self.args.skip_sanitizers = True
+
+        self.populate_dependencies()
         if self.args.dependencies:
             names = set([dep.name for dep in self.dependencies])
             for dep in self.args.dependencies:
@@ -240,6 +252,7 @@ class Builder:
         if self.args.make_parallelism:
             os.environ['YB_MAKE_PARALLELISM'] = str(self.args.make_parallelism)
 
+
     def run(self):
         self.set_compiler('clang' if is_mac() else 'gcc')
         if self.args.clean:
@@ -257,7 +270,8 @@ class Builder:
             # GCC8 has been temporarily removed, since it relies on broken Linuxbrew distribution.
             # See https://github.com/yugabyte/yugabyte-db/issues/3044#issuecomment-560639105
             # self.build(BUILD_TYPE_GCC8_UNINSTRUMENTED)
-        self.build(BUILD_TYPE_CLANG_UNINSTRUMENTED)
+        if not self.args.gcc_only:
+            self.build(BUILD_TYPE_CLANG_UNINSTRUMENTED)
         if is_linux() and not self.args.skip_sanitizers:
             self.build(BUILD_TYPE_ASAN)
             self.build(BUILD_TYPE_TSAN)
