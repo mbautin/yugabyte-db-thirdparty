@@ -47,9 +47,7 @@ class LLVMDependency(Dependency):
         builder.build_with_cmake(self,
                                  ['-DCMAKE_BUILD_TYPE=Release',
                                   '-DCMAKE_INSTALL_PREFIX={}'.format(prefix),
-                                  # TODO: add ";clang-tools-extra" to enabled projects. This will
-                                  # increase build time quite a bit.
-                                  '-DLLVM_ENABLE_PROJECTS=clang',
+                                  '-DLLVM_ENABLE_PROJECTS=clang;clang-tools-extra',
                                   '-DLLVM_INCLUDE_TESTS=OFF',
                                   '-DLLVM_TARGETS_TO_BUILD=X86',
                                   '-DLLVM_ENABLE_RTTI=ON',

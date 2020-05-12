@@ -32,6 +32,8 @@ fi
 
 echo "YB_SRC_ROOT=${YB_SRC_ROOT:-undefined}"
 if [[ -n ${YB_SRC_ROOT:-} ]]; then
+  # TODO: re-test this path. This might not work. We should keep yugabyte-db-thirdparty scripts
+  # separate from the main repo scripts.
   echo "Building YugabyteDB third-party dependencies inside a YugabyteDB source tree: " \
        "$YB_SRC_ROOT"
   . "$YB_SRC_ROOT/build-support/common-build-env.sh"

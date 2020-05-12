@@ -97,6 +97,7 @@ class Builder:
         self.dependencies = [
             build_definitions.zlib.ZLibDependency(),
             build_definitions.lz4.LZ4Dependency(),
+            build_definitions.openssl.OpenSSLDependency(),
             build_definitions.bitshuffle.BitShuffleDependency(),
             build_definitions.libev.LibEvDependency(),
             build_definitions.rapidjson.RapidJsonDependency(),
@@ -107,7 +108,6 @@ class Builder:
             build_definitions.redis_cli.RedisCliDependency(),
             build_definitions.flex.FlexDependency(),
             build_definitions.bison.BisonDependency(),
-            build_definitions.openssl.OpenSSLDependency(),
             build_definitions.icu4c.Icu4cDependency(),
         ]
 
@@ -217,6 +217,7 @@ class Builder:
             skipped = set(self.args.skip.split(','))
             if 'llvm' in skipped:
                 skipped.add('include-what-you-use')
+                skipped.add('libcxx')
             log("Skipping dependencies: {}".format(sorted(skipped)))
             self.selected_dependencies = []
             for dependency in self.dependencies:
