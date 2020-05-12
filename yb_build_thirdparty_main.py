@@ -75,13 +75,6 @@ def compute_file_sha256(path):
     return hashsum_file(hashlib.sha256(), path)
 
 
-def compiler_wrappers_exist(compiler_wrappers_dir):
-    return all(
-        os.path.exists(os.path.join(compiler_wrappers_dir, compiler_name))
-            for compiler_name in ['cc', 'c++']
-    )
-
-
 class Builder:
     def __init__(self):
         self.tp_dir = os.path.dirname(os.path.realpath(sys.argv[0]))
@@ -98,12 +91,8 @@ class Builder:
         self.build_support_dir = os.path.join(self.src_dir, 'build-support')
         self.enterprise_root = os.path.join(self.src_dir, 'ent')
         compiler_wrappers_dir = os.path.join(self.build_support_dir, 'compiler-wrappers')
-        self.using_compiler_wrapper = compiler_wrappers_exist(compiler_wrappers_dir)
         self.cc_wrapper = None
         self.cxx_wrapper = None
-        if self.using_compiler_wrapper:
-            self.cc_wrapper = os.path.join(compiler_wrappers_dir, 'cc')
-            self.cxx_wrapper = os.path.join(compiler_wrappers_dir, 'c++')
 
         self.dependencies = [
             build_definitions.zlib.ZLibDependency(),
@@ -116,10 +105,16 @@ class Builder:
             build_definitions.hiredis.HiRedisDependency(),
             build_definitions.cqlsh.CQLShDependency(),
             build_definitions.redis_cli.RedisCliDependency(),
+            build_definitions.flex.FlexDependency(),
+            build_definitions.bison.BisonDependency(),
+            build_definitions.openssl.OpenSSLDependency(),
+            build_definitions.icu4c.Icu4cDependency(),
         ]
 
         if is_linux():
             self.dependencies += [
+                build_definitions.libuuid.LibUuidDependency(),
+
                 build_definitions.llvm.LLVMDependency(),
                 build_definitions.libcxx.LibCXXDependency(),
 
@@ -220,6 +215,8 @@ class Builder:
                     self.selected_dependencies.append(dep)
         elif self.args.skip:
             skipped = set(self.args.skip.split(','))
+            if 'llvm' in skipped:
+                skipped.add('include-what-you-use')
             log("Skipping dependencies: {}".format(sorted(skipped)))
             self.selected_dependencies = []
             for dependency in self.dependencies:
@@ -276,16 +273,10 @@ class Builder:
         self.cxx = compilers[1]
 
     def get_c_compiler(self):
-        if self.using_compiler_wrapper:
-            assert self.cc_wraper is not None
-            return self.cc_wrapper
         assert self.cc is not None
         return self.cc
 
     def get_cxx_compiler(self):
-        if self.using_compiler_wrapper:
-            assert self.cxx_wrapper is not None
-            return self.cxx_wrapper
         assert self.cxx is not None
         return self.cxx
 
@@ -652,19 +643,35 @@ class Builder:
     def log_prefix(self, dep):
         return '{} ({})'.format(dep.name, self.build_type)
 
-    def build_with_configure(self, log_prefix, extra_args=None, **kwargs):
+    def build_with_configure(
+            self, log_prefix, extra_args=None, jobs=None,
+            configure_cmd=['./configure'], install=['install'],
+            autoconf=False,
+            source_subdir=None):
         os.environ["YB_REMOTE_COMPILATION"] = "0"
-        args = ['./configure', '--prefix={}'.format(self.prefix)]
-        if extra_args is not None:
-            args += extra_args
-        log_output(log_prefix, args)
-        jobs = kwargs['jobs'] if 'jobs' in kwargs else get_make_parallelism()
-        log_output(log_prefix, ['make', '-j{}'.format(jobs)])
-        if 'install' not in kwargs or kwargs['install']:
-            log_output(log_prefix, ['make', 'install'])
+
+        dir_for_build = os.getcwd()
+        if source_subdir:
+            dir_for_build = os.path.join(dir_for_build, source_subdir)
+
+        with PushDir(dir_for_build):
+            log("Building in %s", source_subdir)
+            if autoconf:
+                log_output(log_prefix, ['autoreconf', '-i'])
+
+            configure_args = configure_cmd.copy() + ['--prefix={}'.format(self.prefix)]
+            if extra_args is not None:
+                configure_args += extra_args
+            log_output(log_prefix, configure_args)
+
+            if not jobs:
+                jobs = get_make_parallelism()
+            log_output(log_prefix, ['make', '-j{}'.format(jobs)])
+            if install:
+                log_output(log_prefix, ['make'] + install)
 
     def build_with_cmake(
-            self, dep, extra_args=None, use_ninja=False, src_dir=None, install=True):
+            self, dep, extra_args=None, use_ninja=False, src_dir=None, install=['install']):
         if use_ninja == 'auto':
             use_ninja = is_ninja_available()
             log('Ninja is {}'.format('available' if use_ninja else 'unavailable'))
@@ -677,12 +684,17 @@ class Builder:
         remove_path('CMakeCache.txt')
         remove_path('CMakeFiles')
 
-        source_path= self.source_path(dep)
+        source_path = self.source_path(dep)
         if src_dir:
             src_dir = os.path.join(source_path, src_dir)
         else:
             src_dir = source_path
-        args = ['cmake', src_dir]
+        args = [
+                'cmake',
+                src_dir,
+                '-DCMAKE_C_COMPILER=%s' % self.get_c_compiler(),
+                '-DCMAKE_CXX_COMPILER=%s' % self.get_cxx_compiler()
+        ]
         if use_ninja:
             args += ['-G', 'Ninja']
         if extra_args is not None:
@@ -696,7 +708,7 @@ class Builder:
         log_output(log_prefix, build_tool_cmd)
 
         if install:
-            log_output(log_prefix, [build_tool, 'install'])
+            log_output(log_prefix, [build_tool] + install)
 
     def build(self, build_type):
         if build_type != BUILD_TYPE_COMMON and self.args.build_type is not None:
@@ -851,7 +863,8 @@ class Builder:
 
         with PushDir(self.tp_dir):
             git_commit_sha1 = subprocess.check_output(
-                    ['git', 'log', '--pretty=%H', '-n', '1'] + input_files_for_stamp).strip()
+                    ['git', 'log', '--pretty=%H', '-n', '1'] + input_files_for_stamp
+            ).strip().decode('utf-8')
             build_stamp = 'git_commit_sha1={}\n'.format(git_commit_sha1)
             for git_extra_args in ([], ['--cached']):
                 git_diff = subprocess.check_output(

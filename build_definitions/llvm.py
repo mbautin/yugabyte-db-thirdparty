@@ -22,12 +22,14 @@ from build_definitions import *
 
 class LLVMDependency(Dependency):
     VERSION = '10.0.0'
+    URL_PATTERN = 'https://github.com/llvm/llvm-project/archive/llvmorg-{0}.tar.gz'
 
     # https://github.com/llvm/llvm-project/archive/llvmorg-10.0.0.tar.gz
     def __init__(self):
         super(LLVMDependency, self).__init__(
-                'llvm', LLVMDependency.VERSION, 
-                "https://github.com/llvm/llvm-project/archive/llvmorg-{0}.tar.gz",
+                'llvm',
+                LLVMDependency.VERSION,
+                LLVMDependency.URL_PATTERN,
                 BUILD_GROUP_COMMON)
         self.copy_sources = False
 
@@ -45,15 +47,14 @@ class LLVMDependency(Dependency):
         builder.build_with_cmake(self,
                                  ['-DCMAKE_BUILD_TYPE=Release',
                                   '-DCMAKE_INSTALL_PREFIX={}'.format(prefix),
-                                  '-DLLVM_INCLUDE_DOCS=OFF',
-                                  '-DLLVM_INCLUDE_EXAMPLES=OFF',
+                                  # TODO: add ";clang-tools-extra" to enabled projects. This will
+                                  # increase build time quite a bit.
+                                  '-DLLVM_ENABLE_PROJECTS=clang',
                                   '-DLLVM_INCLUDE_TESTS=OFF',
-                                  '-DLLVM_INCLUDE_UTILS=OFF',
                                   '-DLLVM_TARGETS_TO_BUILD=X86',
                                   '-DLLVM_ENABLE_RTTI=ON',
                                   '-DCMAKE_CXX_FLAGS={}'.format(" ".join(cxx_flags)),
-                                  '-DPYTHON_EXECUTABLE={}'.format(python_executable),
-                                  '-DCLANG_BUILD_EXAMPLES=ON'
+                                  '-DPYTHON_EXECUTABLE={}'.format(python_executable)
                                  ],
                                  use_ninja='auto',
                                  src_dir='llvm')
