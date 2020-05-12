@@ -96,8 +96,13 @@ class Builder:
 
         self.dependencies = [
             build_definitions.zlib.ZLibDependency(),
-            build_definitions.lz4.LZ4Dependency(),
-            build_definitions.openssl.OpenSSLDependency(),
+            build_definitions.lz4.LZ4Dependency()
+        ]
+
+        if is_mac():
+            self.dependencies.append(build_definitions.openssl.OpenSSLDependency())
+
+        self.dependencies += [
             build_definitions.bitshuffle.BitShuffleDependency(),
             build_definitions.libev.LibEvDependency(),
             build_definitions.rapidjson.RapidJsonDependency(),
@@ -108,8 +113,10 @@ class Builder:
             build_definitions.redis_cli.RedisCliDependency(),
             build_definitions.flex.FlexDependency(),
             build_definitions.bison.BisonDependency(),
-            build_definitions.icu4c.Icu4cDependency(),
         ]
+
+        if is_mac():
+            self.dependencies.append(build_definitions.icu4c.Icu4cDependency())
 
         if is_linux():
             self.dependencies += [
