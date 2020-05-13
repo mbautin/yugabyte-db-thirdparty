@@ -31,7 +31,8 @@ class CurlDependency(Dependency):
                              'pop3', 'imap', 'smtp', 'gopher', 'manual', 'librtmp', 'ipv6']
         extra_args = ['--disable-' + feature for feature in disabled_features]
 
-        if is_mac():
-            extra_args.append('--with-ssl=%s' % builder.tp_installed_dir)
+        openssl_dir = get_openssl_dir()
+        if openssl_dir:
+            extra_args.append('--with-ssl=%s' % openssl_dir)
 
         builder.build_with_configure(builder.log_prefix(self), extra_args)
