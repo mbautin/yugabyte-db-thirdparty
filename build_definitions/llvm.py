@@ -44,13 +44,15 @@ class LLVMDependency(Dependency):
         if '-g' in cxx_flags:
             cxx_flags.remove('-g')
 
+        cxx_flags += ['-Wno-pedantic']
         builder.build_with_cmake(self,
                                  ['-DCMAKE_BUILD_TYPE=Release',
                                   '-DCMAKE_INSTALL_PREFIX={}'.format(prefix),
-                                  '-DLLVM_ENABLE_PROJECTS=clang;clang-tools-extra',
+                                  '-DLLVM_ENABLE_PROJECTS=clang;clang-tools-extra;compiler-rt',
                                   '-DLLVM_INCLUDE_TESTS=OFF',
                                   '-DLLVM_TARGETS_TO_BUILD=X86',
                                   '-DLLVM_ENABLE_RTTI=ON',
+                                  '-DCOMPILER_RT_HAS_HWASAN=OFF',
                                   '-DCMAKE_CXX_FLAGS={}'.format(" ".join(cxx_flags)),
                                   '-DPYTHON_EXECUTABLE={}'.format(python_executable)
                                  ],

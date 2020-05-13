@@ -20,18 +20,17 @@ import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from build_definitions import *
-import build_definitions.llvm
+from build_definitions.llvm import LLVMDependency
+
 
 class LibCXXDependency(Dependency):
     def __init__(self):
-        LLVMDependency = build_definitions.llvm.LLVMDependency
         super(LibCXXDependency, self).__init__(
                 'libcxx',
                 LLVMDependency.VERSION,
                 LLVMDependency.URL_PATTERN,
                 BUILD_GROUP_INSTRUMENTED)
 
-        url_prefix = "http://releases.llvm.org/{0}/"
         self.copy_sources = False
 
     def build(self, builder):
@@ -41,24 +40,37 @@ class LibCXXDependency(Dependency):
         remove_path('CMakeCache.txt')
         remove_path('CMakeFiles')
 
-        args = [
-            'cmake',
-            os.path.join(builder.source_path(self), 'llvm'),
-            '-DCMAKE_BUILD_TYPE=Release',
-            '-DLLVM_ENABLE_PROJECTS="clang;clang-tools-extra"',
-            '-DLLVM_TARGETS_TO_BUILD=X86',
-            '-DLLVM_ENABLE_RTTI=ON',
-            '-DLLVM_ENABLE_PROJECTS="libcxx;libcxxabi',
+        llvm_src_path = os.path.join(builder.tp_src_dir, 'llvm-%s' % LLVMDependency.VERSION)
+
+        common_cmake_args = [
+            '-DLLVM_PATH=%s' % llvm_src_path,
             '-DCMAKE_CXX_FLAGS={}'.format(" ".join(builder.ld_flags)),
-            '-DCMAKE_INSTALL_PREFIX={}'.format(prefix)
+            '-DCMAKE_INSTALL_PREFIX={}'.format(prefix),
         ]
+
         if builder.build_type == BUILD_TYPE_ASAN:
-            args.append("-DLLVM_USE_SANITIZER=Address;Undefined")
-        elif builder.build_type == BUILD_TYPE_TSAN:
-            args.append("-DLLVM_USE_SANITIZER=Thread")
+            common_cmake_args.append("-DLLVM_USE_SANITIZER=Address;Undefined")
+
+        if builder.build_type == BUILD_TYPE_TSAN:
+            common_cmake_args.append("-DLLVM_USE_SANITIZER=Thread")
+
+        libcxxabi_libcxx_includes = os.path.join(llvm_src_path, 'libcxx', 'include')
+        libcxxabi_cmake_args = common_cmake_args + [
+            '-DLIBCXXABI_LIBCXX_INCLUDES=%s' % libcxxabi_libcxx_includes
+        ]
         builder.build_with_cmake(
-                self, args, use_ninja='auto', src_dir='libcxx',
-                install=['install-cxxabi', 'install-libcxx'])
+                self, libcxxabi_cmake_args, use_ninja='auto', src_dir='libcxxabi',
+                install=['install-libcxxabi'])
+
+        # As per https://libcxx.llvm.org/docs/BuildingLibcxx.html
+        libcxx_cxx_abi_include_paths = os.path.join(llvm_src_path, 'libcxxabi', 'include')
+        libcxx_cmake_args = common_cmake_args + [
+            '-DLIBCXX_CXX_ABI=libcxxabi',
+            '-DLIBCXX_CXX_ABI_INCLUDE_PATHS=%s' % libcxx_cxx_abi_include_paths
+        ]
+        builder.build_with_cmake(
+                self, libcxx_cmake_args, use_ninja='auto', src_dir='libcxx',
+                install=['install-libcxx'])
 
     def should_build(self, builder):
         return builder.building_with_clang()
