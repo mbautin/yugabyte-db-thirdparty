@@ -52,7 +52,6 @@ class LLVMDependency(Dependency):
                                   '-DLLVM_INCLUDE_TESTS=OFF',
                                   '-DLLVM_TARGETS_TO_BUILD=X86',
                                   '-DLLVM_ENABLE_RTTI=ON',
-                                  '-DCOMPILER_RT_HAS_HWASAN=OFF',
                                   '-DCMAKE_CXX_FLAGS={}'.format(" ".join(cxx_flags)),
                                   '-DPYTHON_EXECUTABLE={}'.format(python_executable)
                                  ],
