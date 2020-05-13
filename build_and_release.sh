@@ -90,7 +90,14 @@ if "$is_centos"; then
     log "Running post_install.sh"
     (
       cd "$YB_LINUXBREW_DIR"
+      set +e
       time ./post_install.sh
+      post_install_exit_code=$?
+      set -e
+      if [[ $post_install_exit_code -ne 0 ]]; then
+        log "Warning: post_install.sh failed with code $post_install_exit_code." \
+            "Assuming this is OK for now."
+      fi
     )
   fi
 fi
