@@ -34,6 +34,12 @@ import_submodules(build_definitions)
 CHECKSUM_FILE_NAME = 'thirdparty_src_checksums.txt'
 CLOUDFRONT_URL = 'http://d3dr9sfxru4sde.cloudfront.net/{}'
 
+# TODO: resolve some issues with thirdparty-built openssl and icu4c before enabling them here.
+BUILD_OPENSSL = False
+BUILD_ICU4C = False
+
+BUILD_INCLUDE_WHAT_YOU_USE = False
+
 
 def hashsum_file(hash, filename, block_size=65536):
     with open(filename, "rb") as f:
@@ -99,7 +105,7 @@ class Builder:
             build_definitions.lz4.LZ4Dependency()
         ]
 
-        if is_mac():
+        if BUILD_OPENSSL:
             self.dependencies.append(build_definitions.openssl.OpenSSLDependency())
 
         self.dependencies += [
@@ -115,7 +121,7 @@ class Builder:
             build_definitions.bison.BisonDependency(),
         ]
 
-        if is_mac():
+        if BUILD_ICU4C:
             self.dependencies.append(build_definitions.icu4c.Icu4cDependency())
 
         if is_linux():
@@ -127,8 +133,10 @@ class Builder:
 
                 build_definitions.libunwind.LibUnwindDependency(),
                 build_definitions.libbacktrace.LibBacktraceDependency(),
-                build_definitions.include_what_you_use.IncludeWhatYouUseDependency()
             ]
+            if BUILD_INCLUDE_WHAT_YOU_USE:
+                self.dependencies.append(
+                    build_definitions.include_what_you_use.IncludeWhatYouUseDependency())
 
         self.dependencies += [
             build_definitions.protobuf.ProtobufDependency(),
@@ -222,9 +230,6 @@ class Builder:
                     self.selected_dependencies.append(dep)
         elif self.args.skip:
             skipped = set(self.args.skip.split(','))
-            if 'llvm' in skipped:
-                skipped.add('include-what-you-use')
-                skipped.add('libcxx')
             log("Skipping dependencies: {}".format(sorted(skipped)))
             self.selected_dependencies = []
             for dependency in self.dependencies:

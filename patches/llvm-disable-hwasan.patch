@@ -1,0 +1,18 @@
+diff --git a/compiler-rt/cmake/config-ix.cmake b/compiler-rt/cmake/config-ix.cmake
+index 3aad08e..9308ac3 100644
+--- a/compiler-rt/cmake/config-ix.cmake
++++ b/compiler-rt/cmake/config-ix.cmake
+@@ -638,12 +638,7 @@ else()
+   set(COMPILER_RT_HAS_MSAN FALSE)
+ endif()
+
+-if (COMPILER_RT_HAS_SANITIZER_COMMON AND HWASAN_SUPPORTED_ARCH AND
+-    OS_NAME MATCHES "Linux|Android")
+-  set(COMPILER_RT_HAS_HWASAN TRUE)
+-else()
+-  set(COMPILER_RT_HAS_HWASAN FALSE)
+-endif()
++set(COMPILER_RT_HAS_HWASAN FALSE)
+
+ if (PROFILE_SUPPORTED_ARCH AND NOT LLVM_USE_SANITIZER AND
+     OS_NAME MATCHES "Darwin|Linux|FreeBSD|Windows|Android|Fuchsia|SunOS|NetBSD")

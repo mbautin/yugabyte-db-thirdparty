@@ -32,6 +32,7 @@ class LLVMDependency(Dependency):
                 LLVMDependency.URL_PATTERN,
                 BUILD_GROUP_COMMON)
         self.copy_sources = False
+        self.patches = ['llvm-disable-hwasan.patch']
 
     def build(self, builder):
         prefix = builder.get_prefix('llvm10')
