@@ -86,6 +86,9 @@ if "$is_centos"; then
       time tar xzf "$brew_tarball_name"
     )
     log "Downloaded and installed Homebrew/Linuxbrew to $YB_LINUXBREW_DIR"
+    if [[ ! -d $YB_LINUXBREW_DIR ]]; then
+      fatal "Directory $YB_LINUXBREW_DIR still does not exist"
+    fi
 
     log "Running post_install.sh"
     (
@@ -100,6 +103,9 @@ if "$is_centos"; then
       fi
     )
   fi
+
+  log "Linuxbrew gcc version:"
+  ( set -x; "$YB_LINUXBREW_DIR/bin/gcc" --version )
 fi
 
 echo "Building YugabyteDB third-party code in $repo_dir"
