@@ -42,10 +42,11 @@ class LibCXXDependency(Dependency):
 
         llvm_src_path = os.path.join(builder.tp_src_dir, 'llvm-%s' % LLVMDependency.VERSION)
 
+        cxx_flags = builder.compiler_flags + builder.cxx_flags_no_libcxx + builder.ld_flags
         common_cmake_args = [
             '-DLLVM_PATH=%s' % llvm_src_path,
-            '-DCMAKE_CXX_FLAGS={}'.format(" ".join(builder.ld_flags)),
             '-DCMAKE_INSTALL_PREFIX={}'.format(prefix),
+            '-DCMAKE_CXX_FLAGS={}'.format(" ".join(cxx_flags))
         ]
 
         if builder.build_type == BUILD_TYPE_ASAN:
@@ -54,15 +55,22 @@ class LibCXXDependency(Dependency):
         if builder.build_type == BUILD_TYPE_TSAN:
             common_cmake_args.append("-DLLVM_USE_SANITIZER=Thread")
 
+        # -----------------------------------------------------------------------------------------
+        # libcxxabi
+        # -----------------------------------------------------------------------------------------
+
         libcxxabi_libcxx_includes = os.path.join(llvm_src_path, 'libcxx', 'include')
         libcxxabi_cmake_args = common_cmake_args + [
-            '-DLIBCXXABI_LIBCXX_INCLUDES=%s' % libcxxabi_libcxx_includes
+            '-DLIBCXXABI_LIBCXX_INCLUDES=%s' % libcxxabi_libcxx_includes,
         ]
         builder.build_with_cmake(
                 self, libcxxabi_cmake_args, use_ninja='auto', src_dir='libcxxabi',
                 install=['install-libcxxabi'])
-
+        # -----------------------------------------------------------------------------------------
+        # libcxx
+        # -----------------------------------------------------------------------------------------
         # As per https://libcxx.llvm.org/docs/BuildingLibcxx.html
+
         libcxx_cxx_abi_include_paths = os.path.join(llvm_src_path, 'libcxxabi', 'include')
         libcxx_cmake_args = common_cmake_args + [
             '-DLIBCXX_CXX_ABI=libcxxabi',

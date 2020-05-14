@@ -26,6 +26,11 @@ class ProtobufDependency(Dependency):
                 'https://github.com/google/protobuf/releases/download/v{0}/protobuf-cpp-{0}.tar.gz',
                 BUILD_GROUP_INSTRUMENTED)
         self.copy_sources = True
+        # Based on
+        # https://github.com/acozzette/protobuf/commit/61f5dca4711bb03bcef1ed8d9c62debcdb033af2
+        # TODO: just upgrade protobuf.
+        self.patches = ['protobuf-remove_check_for_sched_yield.patch']
+        self.patch_strip = 1
 
     def build(self, builder):
         log_prefix = builder.log_prefix(self)

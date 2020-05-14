@@ -339,6 +339,11 @@ class Builder:
         if not is_linux():
             return
 
+        if 'YB_LINUXBREW_DIR' in os.environ:
+            self.linuxbrew_dir = os.environ['YB_LINUXBREW_DIR']
+            self.using_linuxbrew = True
+            return
+
         if 'YB_SRC_ROOT' in os.environ:
             self.linuxbrew_dir = get_linuxbrew_dir()
         else:
@@ -579,7 +584,6 @@ class Builder:
             log("Removing temporary directory: %s", tmp_out_dir)
             shutil.rmtree(tmp_out_dir)
             
-
     def prepare_out_dirs(self):
         dirs = [os.path.join(self.tp_installed_dir, type) for type in BUILD_TYPES]
         libcxx_dirs = [os.path.join(dir, 'libcxx') for dir in dirs]
@@ -708,6 +712,9 @@ class Builder:
                 '-DCMAKE_C_COMPILER=%s' % self.get_c_compiler(),
                 '-DCMAKE_CXX_COMPILER=%s' % self.get_cxx_compiler()
         ]
+        linuxbrew_dir = os.getenv('YB_LINUXBREW_DIR')
+        if linuxbrew_dir:
+            args.append('-DCMAKE_LINKER=%s' % os.path.join(linuxbrew_dir, 'bin', 'ld'))
         if use_ninja:
             args += ['-G', 'Ninja']
         if extra_args is not None:
@@ -784,13 +791,28 @@ class Builder:
         stdlib_path = os.path.join(self.tp_installed_dir, stdlib_suffix, 'libcxx')
         stdlib_include = os.path.join(stdlib_path, 'include', 'c++', 'v1')
         stdlib_lib = os.path.join(stdlib_path, 'lib')
-        self.cxx_flags.insert(0, '-nostdinc++')
-        self.cxx_flags.insert(0, '-isystem')
-        self.cxx_flags.insert(1, stdlib_include)
-        self.cxx_flags.insert(0, '-stdlib=libc++')
-        # Clang complains about argument unused during compilation: '-stdlib=libc++' when both
-        # -stdlib=libc++ and -nostdinc++ are specified.
-        self.cxx_flags.insert(0, '-Wno-error=unused-command-line-argument')
+        self.cxx_flags_no_libcxx = self.cxx_flags.copy()
+
+        flags_to_use_libcxx = [
+                '-Wno-error=unused-command-line-argument',
+                '-stdlib=libc++',
+                '-nostdinc',
+                '-I%s' % stdlib_include,
+            ]
+        if self.using_linuxbrew:
+            # -nostdinc makes this necessary.
+            flags_to_use_libcxx.extend([
+                '-I%s' % os.path.join(self.linuxbrew_dir, suffix)
+                for suffix in [
+                    'include',
+                    # System include path obtained using "gcc -E -Wp,-v -"
+                    'Cellar/gcc/5.5.0_4/lib/gcc/x86_64-unknown-linux-gnu/5.5.0/include',
+                    'Cellar/gcc/5.5.0_4/lib/gcc/x86_64-unknown-linux-gnu/5.5.0/include-fixed',
+                    'Cellar/gcc/5.5.0_4/include'
+                ]
+            ])
+        self.cxx_flags = flags_to_use_libcxx + self.cxx_flags
+
         self.prepend_lib_dir_and_rpath(stdlib_lib)
         if self.using_linuxbrew:
             self.compiler_flags.append('--gcc-toolchain={}'.format(self.linuxbrew_dir))
@@ -811,10 +833,10 @@ class Builder:
         dep_additional_c_flags = (dep.get_additional_c_flags(self) +
                                   dep.get_additional_c_cxx_flags(self))
 
-        os.environ["CXXFLAGS"] = " ".join(
-                self.compiler_flags + self.cxx_flags + dep_additional_cxx_flags)
-        os.environ["CFLAGS"] = " ".join(
-                self.compiler_flags + self.c_flags + dep_additional_c_flags)
+        os.environ["CXXFLAGS"] = " ".join(self.cxx_flags + self.compiler_flags +
+                                          dep_additional_cxx_flags)
+        os.environ["CFLAGS"] = " ".join(self.c_flags + self.compiler_flags +
+                                        dep_additional_c_flags)
         os.environ["LDFLAGS"] = " ".join(self.ld_flags)
         os.environ["LIBS"] = " ".join(self.libs)
 

@@ -47,16 +47,18 @@ class LLVMDependency(Dependency):
             cxx_flags.remove('-g')
 
         cxx_flags += ['-Wno-pedantic']
+        cmake_args = [
+            '-DCMAKE_BUILD_TYPE=Release',
+            '-DCMAKE_INSTALL_PREFIX={}'.format(prefix),
+            '-DLLVM_ENABLE_PROJECTS=clang;clang-tools-extra;compiler-rt;libunwind',
+            '-DLLVM_INCLUDE_TESTS=OFF',
+            '-DLLVM_TARGETS_TO_BUILD=X86',
+            '-DLLVM_ENABLE_RTTI=ON',
+            '-DCMAKE_CXX_FLAGS={}'.format(" ".join(cxx_flags)),
+            '-DPYTHON_EXECUTABLE={}'.format(python_executable)
+        ]
         builder.build_with_cmake(self,
-                                 ['-DCMAKE_BUILD_TYPE=Release',
-                                  '-DCMAKE_INSTALL_PREFIX={}'.format(prefix),
-                                  '-DLLVM_ENABLE_PROJECTS=clang;clang-tools-extra;compiler-rt',
-                                  '-DLLVM_INCLUDE_TESTS=OFF',
-                                  '-DLLVM_TARGETS_TO_BUILD=X86',
-                                  '-DLLVM_ENABLE_RTTI=ON',
-                                  '-DCMAKE_CXX_FLAGS={}'.format(" ".join(cxx_flags)),
-                                  '-DPYTHON_EXECUTABLE={}'.format(python_executable)
-                                 ],
+                                 cmake_args,
                                  use_ninja='auto',
                                  src_dir='llvm')
 
