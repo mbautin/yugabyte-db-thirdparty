@@ -672,7 +672,7 @@ class Builder:
             dir_for_build = os.path.join(dir_for_build, source_subdir)
 
         with PushDir(dir_for_build):
-            log("Building in %s", source_subdir)
+            log("Building in %s", dir_for_build)
             if autoconf:
                 log_output(log_prefix, ['autoreconf', '-i'])
 

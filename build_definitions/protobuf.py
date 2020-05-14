@@ -34,5 +34,7 @@ class ProtobufDependency(Dependency):
 
     def build(self, builder):
         log_prefix = builder.log_prefix(self)
-        builder.build_with_configure(log_prefix,
-                ['--with-pic', '--enable-shared', '--enable-static'])
+        builder.build_with_configure(
+                log_prefix,
+                ['--with-pic', '--enable-shared', '--enable-static'],
+                autoconf=True)
