@@ -46,21 +46,51 @@ class LLVMDependency(Dependency):
         if '-g' in cxx_flags:
             cxx_flags.remove('-g')
 
+        # For multi-stage builds see
+        # - https://llvm.org/docs/AdvancedBuilds.html
+        # - https://bit.ly/2As8Imx
+
         cxx_flags += ['-Wno-pedantic']
+        llvm_enable_projects = [
+                'clang',
+                'compiler-rt',
+                'libunwind',
+                'libcxx',
+                'libcxxabi'
+            ]
+        clang_bootstrap_targets = [
+                'install-compiler-rt',
+                'install-libcxxabi',
+                'install-libcxx',
+                'install-clang',
+                'install-clang-headers'
+        ]
+        all_stage_args = [
+            'CMAKE_BUILD_TYPE=Release',
+            'CLANG_DEFAULT_CXX_STDLIB=libc++',
+            'CLANG_DEFAULT_RTLIB=compiler-rt',
+            'LIBCXXABI_USE_LLVM_UNWINDER=ON',
+            'LLVM_TARGETS_TO_BUILD=X86',
+            'LLVM_ENABLE_RTTI=ON',
+            'LLVM_INCLUDE_TESTS=OFF',
+            'CMAKE_CXX_FLAGS={}'.format(" ".join(cxx_flags)),
+        ]
         cmake_args = [
-            '-DCMAKE_BUILD_TYPE=Release',
             '-DCMAKE_INSTALL_PREFIX={}'.format(prefix),
-            '-DLLVM_ENABLE_PROJECTS=clang;clang-tools-extra;compiler-rt;libunwind',
-            '-DLLVM_INCLUDE_TESTS=OFF',
-            '-DLLVM_TARGETS_TO_BUILD=X86',
-            '-DLLVM_ENABLE_RTTI=ON',
-            '-DCMAKE_CXX_FLAGS={}'.format(" ".join(cxx_flags)),
-            '-DPYTHON_EXECUTABLE={}'.format(python_executable)
+            '-DCLANG_ENABLE_BOOTSTRAP=ON',
+            '-DLLVM_ENABLE_PROJECTS={}'.format(';'.join(llvm_enable_projects)),
+            '-DPYTHON_EXECUTABLE={}'.format(python_executable),
+            '-DCLANG_BOOTSTRAP_TARGETS={}'.format(';'.join(clang_bootstrap_targets))
+        ] + [
+            '-D{}'.format(arg) for arg in all_stage_args
+        ] + [
+             '-DBOOTSTRAP_{}'.format(arg) for arg in all_stage_args
         ]
         builder.build_with_cmake(self,
                                  cmake_args,
                                  use_ninja='auto',
-                                 src_dir='llvm')
+                                 src_dir='llvm',
+                                 extra_build_tool_args=['stage2'])
 
         link_path = os.path.join(builder.tp_dir, 'clang-toolchain')
         remove_path(link_path)

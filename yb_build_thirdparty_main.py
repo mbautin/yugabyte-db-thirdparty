@@ -688,7 +688,8 @@ class Builder:
                 log_output(log_prefix, ['make'] + install)
 
     def build_with_cmake(
-            self, dep, extra_args=None, use_ninja=False, src_dir=None, install=['install']):
+            self, dep, extra_args=None, use_ninja=False, src_dir=None, install=['install'],
+            extra_build_tool_args=[]):
         if use_ninja == 'auto':
             use_ninja = is_ninja_available()
             log('Ninja is {}'.format('available' if use_ninja else 'unavailable'))
@@ -712,9 +713,8 @@ class Builder:
                 '-DCMAKE_C_COMPILER=%s' % self.get_c_compiler(),
                 '-DCMAKE_CXX_COMPILER=%s' % self.get_cxx_compiler()
         ]
-        linuxbrew_dir = os.getenv('YB_LINUXBREW_DIR')
-        if linuxbrew_dir:
-            args.append('-DCMAKE_LINKER=%s' % os.path.join(linuxbrew_dir, 'bin', 'ld'))
+        if self.using_linuxbrew:
+            args.append('-DCMAKE_LINKER=%s' % os.path.join(self.linuxbrew_dir, 'bin', 'ld'))
         if use_ninja:
             args += ['-G', 'Ninja']
         if extra_args is not None:
@@ -723,7 +723,7 @@ class Builder:
         log_output(log_prefix, args)
 
         build_tool = 'ninja' if use_ninja else 'make'
-        build_tool_cmd = [build_tool, '-j{}'.format(get_make_parallelism())]
+        build_tool_cmd = [build_tool, '-j{}'.format(get_make_parallelism())] + extra_build_tool_args
 
         log_output(log_prefix, build_tool_cmd)
 
