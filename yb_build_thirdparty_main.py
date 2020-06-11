@@ -101,8 +101,8 @@ class Builder:
         self.dependencies = [
             build_definitions.zlib.ZLibDependency(),
             build_definitions.lz4.LZ4Dependency(),
+            build_definitions.gettext.GetTextDependency(),
             build_definitions.openssl.OpenSSLDependency(),
-            build_definitions.bitshuffle.BitShuffleDependency(),
             build_definitions.libev.LibEvDependency(),
             build_definitions.rapidjson.RapidJsonDependency(),
             build_definitions.squeasel.SqueaselDependency(),
@@ -666,6 +666,7 @@ class Builder:
             configure_cmd=['./configure'],
             install=['install'],
             autoconf=False,
+            autogen=False,
             source_subdir=None):
         os.environ["YB_REMOTE_COMPILATION"] = "0"
         dir_for_build = os.getcwd()
@@ -674,6 +675,8 @@ class Builder:
 
         with PushDir(dir_for_build):
             log("Building in %s", dir_for_build)
+            if autogen:
+                log_output(log_prefix, ['./autogen.sh'])
             if autoconf:
                 log_output(log_prefix, ['autoreconf', '-i'])
 
