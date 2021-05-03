@@ -2,9 +2,8 @@ name: ci
 on: [push, pull_request]
 jobs:
   build:
-    name: build ${{ matrix.binary || 'sccache' }} ${{ matrix.target }}
+    name: ${{ matrix.archive_name_suffix }}
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 30
     strategy:
       matrix:
         include:
@@ -29,7 +28,7 @@ jobs:
               -e YB_BUILD_THIRDPARTY_EXTRA_ARGS \
               -e CIRCLE_PULL_REQUEST \
               "--mount=type=bind,src=$checkout_dir,dst=/opt/yb-build/thirdparty/checkout" \
-              << parameters.docker_image >> \
+              "{{ parameters.docker_image }}" \
               bash -c "
                 set -euo pipefail
                 cd /opt/yb-build/thirdparty/checkout
@@ -37,3 +36,5 @@ jobs:
                 export YB_BUILD_THIRDPARTY_ARGS='{{ parameters.build_thirdparty_args }}'
                 ./build_and_release.sh
               "
+        env: 
+          YB_BUILD_THIRDPARTY_EXTRA_ARGS: {{ matrix.build_thirdparty_args }}
