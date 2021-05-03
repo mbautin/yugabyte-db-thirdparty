@@ -17,23 +17,8 @@ jobs:
         uses: actions/checkout@v1
 
       - name: Build
-        run: |
-          df -H .
-          checkout_dir=$PWD
-          export YB_BUILD_THIRDPARTY_EXTRA_ARGS={{ matrix.build_thirdparty_args }}
-          echo "Building in directory: $checkout_dir"
-          echo "YB_BUILD_THIRDPARTY_EXTRA_ARGS=${YB_BUILD_THIRDPARTY_EXTRA_ARGS:-undefined}"
-          docker run -t \
-              --cap-add=SYS_PTRACE \
-              -e GITHUB_TOKEN \
-              -e YB_BUILD_THIRDPARTY_EXTRA_ARGS \
-              -e CIRCLE_PULL_REQUEST \
-              "--mount=type=bind,src=$checkout_dir,dst=/opt/yb-build/thirdparty/checkout" \
-              "{{ matrix.docker_image }}" \
-              bash -c "
-                set -euo pipefail
-                cd /opt/yb-build/thirdparty/checkout
-                export YB_THIRDPARTY_ARCHIVE_NAME_SUFFIX='{{ matrix.archive_name_suffix }}'
-                export YB_BUILD_THIRDPARTY_ARGS='{{ parameters.build_thirdparty_args }}'
-                ./build_and_release.sh
-              "
+        run: linux_build.sh
+        env:
+          YB_BUILD_THIRDPARTY_ARGS: {{ matrix.build_thirdparty_args }}
+          YB_DOCKER_IMAGE: {{ matrix.docker_image }}
+          YB_ARCHIVE_NAME_SUFFIX: {{ matrix.archive_name_suffix }}
