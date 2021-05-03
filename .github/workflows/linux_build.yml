@@ -1,0 +1,39 @@
+name: ci
+on: [push, pull_request]
+jobs:
+  build:
+    name: build ${{ matrix.binary || 'sccache' }} ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-20.04
+            name: centos7-linuxbrew-gcc5
+            archive_name_suffix: centos7-linuxbrew
+            docker_image: yugabyteci/yb_build_infra_centos7:v2020-12-14T01_12_21
+            build_thirdparty_args: "--toolchain=linuxbrew"
+    steps:
+      - name: Clone repository
+        uses: actions/checkout@v1
+
+      - name: Build
+        run: |
+          df -H .
+          checkout_dir=$PWD
+          echo "Building in directory: $checkout_dir"
+          echo "YB_BUILD_THIRDPARTY_EXTRA_ARGS=${YB_BUILD_THIRDPARTY_EXTRA_ARGS:-undefined}"
+          docker run -t \
+              --cap-add=SYS_PTRACE \
+              -e GITHUB_TOKEN \
+              -e YB_BUILD_THIRDPARTY_EXTRA_ARGS \
+              -e CIRCLE_PULL_REQUEST \
+              "--mount=type=bind,src=$checkout_dir,dst=/opt/yb-build/thirdparty/checkout" \
+              << parameters.docker_image >> \
+              bash -c "
+                set -euo pipefail
+                cd /opt/yb-build/thirdparty/checkout
+                export YB_THIRDPARTY_ARCHIVE_NAME_SUFFIX='{{ matrix.archive_name_suffix }}'
+                export YB_BUILD_THIRDPARTY_ARGS='{{ parameters.build_thirdparty_args }}'
+                ./build_and_release.sh
+              "
