@@ -17,6 +17,8 @@ jobs:
         uses: actions/checkout@v1
 
       - name: Build
+        env: 
+          YB_BUILD_THIRDPARTY_EXTRA_ARGS: {{ matrix.build_thirdparty_args }}
         run: |
           df -H .
           checkout_dir=$PWD
@@ -36,5 +38,3 @@ jobs:
                 export YB_BUILD_THIRDPARTY_ARGS='{{ parameters.build_thirdparty_args }}'
                 ./build_and_release.sh
               "
-        env: 
-          YB_BUILD_THIRDPARTY_EXTRA_ARGS: {{ matrix.build_thirdparty_args }}
