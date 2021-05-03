@@ -20,7 +20,7 @@ jobs:
         run: |
           df -H .
           checkout_dir=$PWD
-          export YB_BUILD_THIRDPARTY_EXTRA_ARGS="{{ matrix.build_thirdparty_args }}"
+          export YB_BUILD_THIRDPARTY_EXTRA_ARGS={{ matrix.build_thirdparty_args }}
           echo "Building in directory: $checkout_dir"
           echo "YB_BUILD_THIRDPARTY_EXTRA_ARGS=${YB_BUILD_THIRDPARTY_EXTRA_ARGS:-undefined}"
           docker run -t \
@@ -29,7 +29,7 @@ jobs:
               -e YB_BUILD_THIRDPARTY_EXTRA_ARGS \
               -e CIRCLE_PULL_REQUEST \
               "--mount=type=bind,src=$checkout_dir,dst=/opt/yb-build/thirdparty/checkout" \
-              "{{ parameters.docker_image }}" \
+              "{{ matrix.docker_image }}" \
               bash -c "
                 set -euo pipefail
                 cd /opt/yb-build/thirdparty/checkout
