@@ -9,10 +9,9 @@ docker run -t \
   --cap-add=SYS_PTRACE \
   -e GITHUB_TOKEN \
   -e YB_BUILD_THIRDPARTY_ARGS \
-  -e YB_DOCKER_IMAGE \
   -e YB_ARCHIVE_NAME_SUFFIX \
   "--mount=type=bind,src=$checkout_dir,dst=/opt/yb-build/thirdparty/checkout" \
-  "{{ matrix.docker_image }}" \
+  "$YB_DOCKER_IMAGE" \
   bash -c "
     set -euo pipefail
     cd /opt/yb-build/thirdparty/checkout
