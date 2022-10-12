@@ -69,6 +69,7 @@ from yugabyte_db_thirdparty.arch import (
     get_target_arch,
     get_other_macos_arch,
     add_homebrew_to_path,
+    is_macos_arm64_build,
 )
 from yugabyte_db_thirdparty.util import (
     assert_dir_exists,
@@ -327,11 +328,6 @@ class Builder(BuilderInterface):
                 get_build_def_module('libuuid').LibUuidDependency(),
             ]
 
-            standalone_llvm7_toolchain = self.toolchain and self.toolchain.toolchain_type == 'llvm7'
-            if standalone_llvm7_toolchain:
-                self.dependencies.append(
-                        get_build_def_module('llvm7_libcxx').Llvm7LibCXXDependency())
-
             llvm_major_version: Optional[int] = self.compiler_choice.get_llvm_major_version()
             if (self.compiler_choice.is_clang() and
                     llvm_major_version is not None and llvm_major_version >= 10):
@@ -533,6 +529,12 @@ class Builder(BuilderInterface):
                 ["-mmacosx-version-min=%s" % get_min_supported_macos_version()])
 
             self.ld_flags.append("-Wl,-headerpad_max_install_names")
+
+            # https://stackoverflow.com/questions/65361672/build-apple-silicon-binary-on-intel-machine
+            if self.is_mac_intel_to_arm_cross_compile():
+                target_flags = ['--target=arm64-apple-macos']
+                self.compiler_flags += target_flags
+                self.ld_flags += target_flags
         else:
             fatal("Unsupported platform: {}".format(platform.system()))
 
@@ -605,16 +607,36 @@ class Builder(BuilderInterface):
         with PushDir(dir_for_build):
             log("Building in %s using the configure tool", dir_for_build)
             try:
-                if run_autogen:
-                    self.log_output(log_prefix, ['./autogen.sh'])
-                if autoconf:
-                    self.log_output(log_prefix, ['autoreconf', '-i'])
+                autogen_cmd = ['./autogen.sh'] if run_autogen else None
+                autoreconf_cmd = ['autoreconf', '-i'] if autoconf else None
 
                 configure_args = (
                     configure_cmd.copy() + ['--prefix={}'.format(self.prefix)] + extra_args
                 )
-                configure_args = get_arch_switch_cmd_prefix() + configure_args
-                self.log_output(
+
+                if not self.args.mac_intel_to_arm_cross_compile:
+                    configure_args = get_arch_switch_cmd_prefix() + configure_args
+
+                # Write all the commands we use to configure the project into a script so we can
+                # re-run it easily for debugging.
+                configure_debug_script_lines = (line for line in [
+                    '#!/usr/bin/env bash',
+                    f'. ./{DEPENDENCY_ENV_FILE_NAME}',
+                    'set -euo pipefail -x',
+                    shlex_join(autogen_cmd) if autogen_cmd else None,
+                    shlex_join(configure_args) if configure_args else None
+                ] if line is not None)
+                configure_debug_script_path = os.path.join(dir_for_build, 'yb_configure.sh')
+                with open(configure_debug_script_path, 'w') as configure_debug_script_file:
+                    configure_debug_script_file.write(
+                        '\n'.join(configure_debug_script_lines) + '\n')
+                os.chmod(configure_debug_script_path, 0o755)
+
+                for maybe_preliminary_cmd in [autogen_cmd, autoreconf_cmd]:
+                    if maybe_preliminary_cmd is not None:
+                        log_output(log_prefix, maybe_preliminary_cmd)
+
+                log_output(
                     log_prefix,
                     configure_args,
                     disallowed_pattern=DISALLOWED_CONFIGURE_OUTPUT_RE)
@@ -1393,3 +1415,6 @@ class Builder(BuilderInterface):
             '-DOPENSSL_LIBRARIES=%s;%s' % (openssl_crypto_library, openssl_ssl_library)
         ]
         return openssl_options
+
+    def is_mac_intel_to_arm_cross_compile(self) -> bool:
+        return is_macos_arm64_build() and self.args.mac_intel_to_arm_cross_compile

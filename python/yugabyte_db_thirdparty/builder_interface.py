@@ -120,4 +120,6 @@ class BuilderInterface:
             prefix: str,
             args: List[Any],
             disallowed_pattern: Optional[Pattern] = None) -> None:
+
+    def is_mac_intel_to_arm_cross_compile(self) -> bool:
         raise NotImplementedError()
